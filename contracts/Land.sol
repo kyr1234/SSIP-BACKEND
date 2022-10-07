@@ -5,10 +5,10 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 contract Land is ReentrancyGuard {
-    address contractOwner;
+    address GovernmentOfficial;
 
     constructor() {
-        contractOwner = msg.sender;
+        GovernmentOfficial = msg.sender;
     }
 
     struct Landreg {
@@ -90,14 +90,14 @@ contract Land is ReentrancyGuard {
 
     // modifer
     function isContractOwner(address _addr) public view returns (bool) {
-        if (_addr == contractOwner) return true;
+        if (_addr == GovernmentOfficial) return true;
         else return false;
     }
 
     //remove
     function changeContractOwner(address _addr) public {
-        require(msg.sender == contractOwner, "you are not contractOwner");
-        contractOwner = _addr;
+        require(msg.sender == GovernmentOfficial, "you are not contractOwner");
+        GovernmentOfficial = _addr;
     }
 
     //-----------------------------------------------User-----------------------------------------------
@@ -111,7 +111,7 @@ contract Land is ReentrancyGuard {
     }
 
     event NewUserRegistered(
-        address,    
+        address,
         string _name,
         uint _age,
         string _city,
@@ -148,20 +148,29 @@ contract Land is ReentrancyGuard {
             false
         );
 
-        emit NewUserRegistered(msg.sender, _name, _age, _city, _aadharNumber, _panNumber, _document, _email);
+        emit NewUserRegistered(
+            msg.sender,
+            _name,
+            _age,
+            _city,
+            _aadharNumber,
+            _panNumber,
+            _document,
+            _email
+        );
     }
 
     error NotGovernmentOfficial(address msgSender);
-    // modifier of government official
-    address govOfficialWalletAddress = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
-    modifier isGovernmentOfficial {
-        if(msg.sender != govOfficialWalletAddress) {
+
+    modifier isGovernmentOfficial() {
+        if (msg.sender != GovernmentOfficial) {
             revert NotGovernmentOfficial(msg.sender);
         }
         _;
     }
 
     event UserVerified(address);
+
     function verifyUser(address userWalletAddress) public isGovernmentOfficial {
         UserMapping[userWalletAddress].isUserVerified = true;
         emit UserVerified(userWalletAddress);
@@ -182,8 +191,7 @@ contract Land is ReentrancyGuard {
         uint landPrice,
         string _allLatiLongi,
         uint _propertyPID,
-        string _surveyNum,
-        string _document
+        string _surveyNum
     );
 
     function addLand(
@@ -219,8 +227,7 @@ contract Land is ReentrancyGuard {
             landPrice,
             _allLatiLongi,
             _propertyPID,
-            _surveyNum,
-            _document
+            _surveyNum
         );
     }
 
@@ -248,7 +255,7 @@ contract Land is ReentrancyGuard {
     } 
     */
 
-   event LandIsRequestedToBuy(uint landID);
+    event LandIsRequestedToBuy(uint landID);
 
     function requestforBuy(uint _landId) public {
         require(isUserVerified(msg.sender) && isLandVerified(_landId));
@@ -302,15 +309,18 @@ contract Land is ReentrancyGuard {
                 LandRequestMapping[_requestId].requestStatus ==
                 reqStatus.accepted
         );
-        if (LandRequestMapping[_requestId].isPaymentDone != false) revert PaymentAlreadyCompleted();
+        if (LandRequestMapping[_requestId].isPaymentDone != false)
+            revert PaymentAlreadyCompleted();
 
         LandRequestMapping[_requestId].requestStatus = reqStatus.paymentdone;
         require(
-            msg.value >= lands[LandRequestMapping[_requestId].landId].landPrice, 
+            msg.value >= lands[LandRequestMapping[_requestId].landId].landPrice,
             "Transacted amount is lesser than current Land price"
         );
 
-        lands[LandRequestMapping[_requestId].landId].ownerAddress.transfer(msg.value);
+        lands[LandRequestMapping[_requestId].landId].ownerAddress.transfer(
+            msg.value
+        );
         LandRequestMapping[_requestId].isPaymentDone = true;
         paymentDoneList[1].push(_requestId);
 
@@ -321,9 +331,7 @@ contract Land is ReentrancyGuard {
         return paymentDoneList[1];
     }
 
-    function transferOwnership(uint _requestId)
-        internal
-        returns (bool) {
+    function transferOwnership(uint _requestId) internal returns (bool) {
         if (LandRequestMapping[_requestId].isPaymentDone == false) return false;
         // documentId++;
         LandRequestMapping[_requestId].requestStatus = reqStatus.commpleted;
@@ -334,9 +342,12 @@ contract Land is ReentrancyGuard {
         uint len = MyLands[LandRequestMapping[_requestId].sellerId].length;
         for (uint i = 0; i < len; i++) {
             if (
-                MyLands[LandRequestMapping[_requestId].sellerId][i] == LandRequestMapping[_requestId].landId
+                MyLands[LandRequestMapping[_requestId].sellerId][i] ==
+                LandRequestMapping[_requestId].landId
             ) {
-                MyLands[LandRequestMapping[_requestId].sellerId][i] = MyLands[LandRequestMapping[_requestId].sellerId][len - 1];
+                MyLands[LandRequestMapping[_requestId].sellerId][i] = MyLands[
+                    LandRequestMapping[_requestId].sellerId
+                ][len - 1];
                 MyLands[LandRequestMapping[_requestId].sellerId].pop();
                 break;
             }
@@ -346,7 +357,7 @@ contract Land is ReentrancyGuard {
         lands[LandRequestMapping[_requestId].landId].isforSell = false;
         lands[LandRequestMapping[_requestId].landId]
             .ownerAddress = LandRequestMapping[_requestId].buyerId;
-            
+
         return true;
     }
 

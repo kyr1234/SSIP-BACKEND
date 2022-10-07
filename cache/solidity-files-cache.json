@@ -480,8 +480,8 @@
       ]
     },
     "C:\\Users\\Ankit\\Desktop\\Project\\Hacakthon\\SSIP\\SSIP-BACKEND\\contracts\\Land.sol": {
-      "lastModificationDate": 1665138522819,
-      "contentHash": "df1d9c132c30a454ee3c8cc5f06abad1",
+      "lastModificationDate": 1665142608199,
+      "contentHash": "d966d49157e2b44ae3ff3c26e5a62c3b",
       "sourceName": "contracts/Land.sol",
       "solcConfig": {
         "version": "0.8.8",
