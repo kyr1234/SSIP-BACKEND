@@ -49,6 +49,7 @@ contract Land is ReentrancyGuard {
         uint landId;
         reqStatus requestStatus;
         bool isPaymentDone;
+        uint requestTimestamp;
     }
 
     enum reqStatus {
@@ -109,6 +110,17 @@ contract Land is ReentrancyGuard {
         }
     }
 
+    event NewUserRegistered(
+        address,    
+        string _name,
+        uint _age,
+        string _city,
+        string _aadharNumber,
+        string _panNumber,
+        string _document,
+        string _email
+    );
+
     function registerUser(
         string memory _name,
         uint _age,
@@ -135,12 +147,24 @@ contract Land is ReentrancyGuard {
             _email,
             false
         );
-        //emit Registration(msg.sender);
+
+        emit NewUserRegistered(msg.sender, _name, _age, _city, _aadharNumber, _panNumber, _document, _email);
     }
 
+    error NotGovernmentOfficial(address msgSender);
     // modifier of government official
-    function verifyUser(address _userId) public {
-        UserMapping[_userId].isUserVerified = true;
+    address govOfficialWalletAddress = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+    modifier isGovernmentOfficial {
+        if(msg.sender != govOfficialWalletAddress) {
+            revert NotGovernmentOfficial(msg.sender);
+        }
+        _;
+    }
+
+    event UserVerified(address);
+    function verifyUser(address userWalletAddress) public isGovernmentOfficial {
+        UserMapping[userWalletAddress].isUserVerified = true;
+        emit UserVerified(userWalletAddress);
     }
 
     function isUserVerified(address id) public view returns (bool) {
@@ -152,6 +176,16 @@ contract Land is ReentrancyGuard {
     }
 
     //-----------------------------------------------Land-----------------------------------------------
+    event NewLandAdded(
+        uint _area,
+        string _address,
+        uint landPrice,
+        string _allLatiLongi,
+        uint _propertyPID,
+        string _surveyNum,
+        string _document
+    );
+
     function addLand(
         uint _area,
         string memory _address,
@@ -179,7 +213,15 @@ contract Land is ReentrancyGuard {
         MyLands[msg.sender].push(landsCount);
 
         //  allLandList[1].push(landsCount);
-        // emit AddingLand(landsCount);
+        emit NewLandAdded(
+            _area,
+            _address,
+            landPrice,
+            _allLatiLongi,
+            _propertyPID,
+            _surveyNum,
+            _document
+        );
     }
 
     function ReturnAllLandList() public view returns (uint[] memory) {
@@ -187,7 +229,7 @@ contract Land is ReentrancyGuard {
     }
 
     // modifier government official
-    function verifyLand(uint _id) public {
+    function verifyLand(uint _id) public isGovernmentOfficial {
         lands[_id].isLandVerified = true;
     }
 
@@ -199,10 +241,14 @@ contract Land is ReentrancyGuard {
         return MyLands[id];
     }
 
-    /*     function makeItforSell(uint id) public {
+    /*     
+        function makeItforSell(uint id) public {
         require(lands[id].ownerAddress == msg.sender);
         lands[id].isforSell = true;
-    } */
+    } 
+    */
+
+   event LandIsRequestedToBuy(uint landID);
 
     function requestforBuy(uint _landId) public {
         require(isUserVerified(msg.sender) && isLandVerified(_landId));
@@ -213,10 +259,13 @@ contract Land is ReentrancyGuard {
             payable(msg.sender),
             _landId,
             reqStatus.requested,
-            false
+            false,
+            block.timestamp
         );
         MyReceivedLandRequest[lands[_landId].ownerAddress].push(requestCount);
         MySentLandRequest[msg.sender].push(requestCount);
+
+        emit LandIsRequestedToBuy(_landId);
     }
 
     function myReceivedLandRequests() public view returns (uint[] memory) {
@@ -245,33 +294,38 @@ contract Land is ReentrancyGuard {
         return lands[id].landPrice;
     }
 
+    error PaymentAlreadyCompleted();
+
     function makePayment(uint _requestId) public payable {
         require(
             LandRequestMapping[_requestId].buyerId == msg.sender &&
                 LandRequestMapping[_requestId].requestStatus ==
                 reqStatus.accepted
         );
+        if (LandRequestMapping[_requestId].isPaymentDone != false) revert PaymentAlreadyCompleted();
 
         LandRequestMapping[_requestId].requestStatus = reqStatus.paymentdone;
-        //LandRequestMapping[_requestId].sellerId.transfer(lands[LandRequestMapping[_requestId].landId].landPrice);
-        //lands[LandRequestMapping[_requestId].landId].ownerAddress.transfer(lands[LandRequestMapping[_requestId].landId].landPrice);
-        lands[LandRequestMapping[_requestId].landId].ownerAddress.transfer(
-            msg.value
+        require(
+            msg.value >= lands[LandRequestMapping[_requestId].landId].landPrice, 
+            "Transacted amount is lesser than current Land price"
         );
+
+        lands[LandRequestMapping[_requestId].landId].ownerAddress.transfer(msg.value);
         LandRequestMapping[_requestId].isPaymentDone = true;
         paymentDoneList[1].push(_requestId);
+
+        transferOwnership(_requestId);
     }
 
     function returnPaymentDoneList() public view returns (uint[] memory) {
         return paymentDoneList[1];
     }
 
-    function transferOwnership(uint _requestId, string memory documentUrl)
-        public
-        returns (bool)
-    {
+    function transferOwnership(uint _requestId)
+        internal
+        returns (bool) {
         if (LandRequestMapping[_requestId].isPaymentDone == false) return false;
-        documentId++;
+        // documentId++;
         LandRequestMapping[_requestId].requestStatus = reqStatus.commpleted;
         MyLands[LandRequestMapping[_requestId].buyerId].push(
             LandRequestMapping[_requestId].landId
@@ -280,21 +334,19 @@ contract Land is ReentrancyGuard {
         uint len = MyLands[LandRequestMapping[_requestId].sellerId].length;
         for (uint i = 0; i < len; i++) {
             if (
-                MyLands[LandRequestMapping[_requestId].sellerId][i] ==
-                LandRequestMapping[_requestId].landId
+                MyLands[LandRequestMapping[_requestId].sellerId][i] == LandRequestMapping[_requestId].landId
             ) {
-                MyLands[LandRequestMapping[_requestId].sellerId][i] = MyLands[
-                    LandRequestMapping[_requestId].sellerId
-                ][len - 1];
-                //MyLands[LandRequestMapping[_requestId].sellerId].length--;
+                MyLands[LandRequestMapping[_requestId].sellerId][i] = MyLands[LandRequestMapping[_requestId].sellerId][len - 1];
                 MyLands[LandRequestMapping[_requestId].sellerId].pop();
                 break;
             }
         }
-        lands[LandRequestMapping[_requestId].landId].document = documentUrl;
+
+        // lands[LandRequestMapping[_requestId].landId].document = documentUrl;
         lands[LandRequestMapping[_requestId].landId].isforSell = false;
         lands[LandRequestMapping[_requestId].landId]
             .ownerAddress = LandRequestMapping[_requestId].buyerId;
+            
         return true;
     }
 
