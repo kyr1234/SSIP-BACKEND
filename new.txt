@@ -1,0 +1,23 @@
+
+    function Listitem(
+        address nftaddress,
+        uint256 tokenid,
+        uint256 price
+    )
+        external
+        isOwner(nftaddress, tokenid, msg.sender)
+        notListed(nftaddress, tokenid)
+    {
+        if (price < 0) {
+            revert Price_Should_Be_Greater_Than_Zero();
+        }
+
+        IERC721 nft = IERC721(nftaddress);
+        if (nft.getApproved(tokenid) != address(this)) {
+            revert Not_Approved();
+        }
+
+        List_Item[nftaddress][tokenid] = Listing(price, msg.sender);
+
+        emit Item_Listed(nftaddress, tokenid, price, msg.sender);
+    }
