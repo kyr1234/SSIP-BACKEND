@@ -1,14 +1,29 @@
-//SPDX-License-Identifier:MIT
-
-pragma solidity ^0.8.7;
+//SPDX-License-Identifier: MIT
+pragma solidity >=0.8.0;
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 contract Land is ReentrancyGuard {
     address GovernmentOfficial;
+    uint public governmentFeesRate = 4;
+    uint count = 0;
 
     constructor() {
         GovernmentOfficial = msg.sender;
+    }
+
+    enum OwnerApprovalStatus {
+        REQUESTED,
+        ACCEPTED,
+        REJECTED,
+        PAYMENT_DONE,
+        COMPLETED
+    }
+
+    enum GovernmentApprovalStatus {
+        PENDING,
+        ACCEPTED,
+        REJECTED
     }
 
     struct Landreg {
@@ -38,30 +53,22 @@ contract Land is ReentrancyGuard {
         string document;
         string email;
         bool isUserVerified;
+        bool isExist;
     }
 
     // If the current owner approves then only the buyer can send money
-
     struct LandRequest {
         uint reqId;
         address payable sellerId;
         address payable buyerId;
         uint landId;
-        reqStatus requestStatus;
+        OwnerApprovalStatus requestStatus;
         bool isPaymentDone;
         uint requestTimestamp;
-    }
-
-    enum reqStatus {
-        requested,
-        accepted,
-        rejected,
-        paymentdone,
-        commpleted
+        GovernmentApprovalStatus govApprovalStatus;
     }
 
     // USER AND LAND MAPPING
-
     uint public userCount;
     uint public landsCount;
     uint public documentId;
@@ -88,12 +95,6 @@ contract Land is ReentrancyGuard {
 
     mapping(uint => uint[]) paymentDoneList;
 
-    // modifer
-    function isContractOwner(address _addr) public view returns (bool) {
-        if (_addr == GovernmentOfficial) return true;
-        else return false;
-    }
-
     //remove
     function changeContractOwner(address _addr) public {
         require(msg.sender == GovernmentOfficial, "you are not contractOwner");
@@ -102,7 +103,7 @@ contract Land is ReentrancyGuard {
 
     //-----------------------------------------------User-----------------------------------------------
 
-    function isUserRegistered(address _addr) public view returns (bool) {
+    function isUserRegistered(address _addr) external view returns (bool) {
         if (RegisteredUserMapping[_addr]) {
             return true;
         } else {
@@ -111,15 +112,23 @@ contract Land is ReentrancyGuard {
     }
 
     event NewUserRegistered(
-        address,
+        address indexed useraddress,
         string _name,
         uint _age,
         string _city,
         string _aadharNumber,
-        string _panNumber,
-        string _document,
+        string indexed _panNumber,
+        string indexed _document,
         string _email
     );
+
+    modifier UserNotGovernmentOfficial(address sender) {
+        require(
+            sender != GovernmentOfficial,
+            "Government official cannot register as User"
+        );
+        _;
+    }
 
     function registerUser(
         string memory _name,
@@ -129,7 +138,7 @@ contract Land is ReentrancyGuard {
         string memory _panNumber,
         string memory _document,
         string memory _email
-    ) public {
+    ) public UserNotGovernmentOfficial(msg.sender) {
         require(!RegisteredUserMapping[msg.sender]);
 
         RegisteredUserMapping[msg.sender] = true;
@@ -145,7 +154,8 @@ contract Land is ReentrancyGuard {
             _panNumber,
             _document,
             _email,
-            false
+            false,
+            true
         );
 
         emit NewUserRegistered(
@@ -169,6 +179,10 @@ contract Land is ReentrancyGuard {
         _;
     }
 
+    function changeGovernmentFeesRate(uint rate) external isGovernmentOfficial {
+        governmentFeesRate = rate;
+    }
+
     event UserVerified(address);
 
     function verifyUser(address userWalletAddress) public isGovernmentOfficial {
@@ -186,12 +200,13 @@ contract Land is ReentrancyGuard {
 
     //-----------------------------------------------Land-----------------------------------------------
     event NewLandAdded(
+        uint landID,
         uint _area,
         string _address,
         uint landPrice,
         string _allLatiLongi,
-        uint _propertyPID,
-        string _surveyNum
+        uint indexed _propertyPID,
+        string indexed _surveyNum
     );
 
     function addLand(
@@ -222,6 +237,7 @@ contract Land is ReentrancyGuard {
 
         //  allLandList[1].push(landsCount);
         emit NewLandAdded(
+            landsCount,
             _area,
             _address,
             landPrice,
@@ -255,24 +271,38 @@ contract Land is ReentrancyGuard {
     } 
     */
 
-    event LandIsRequestedToBuy(uint landID);
+    event LandIsRequestedToBuy(uint requestID, uint landID);
 
-    function requestforBuy(uint _landId) public {
-        require(isUserVerified(msg.sender) && isLandVerified(_landId));
+    function requestforBuy(uint _landId)
+        public
+        UserNotGovernmentOfficial(msg.sender)
+        returns (uint)
+    {
+        require(
+            isUserVerified(msg.sender) && isLandVerified(_landId),
+            "User and Land both MUST be verified"
+        );
+        require(
+            msg.sender != lands[_landId].ownerAddress,
+            "Owner cannot request for buying land"
+        );
+
         requestCount++;
         LandRequestMapping[requestCount] = LandRequest(
             requestCount,
             lands[_landId].ownerAddress,
             payable(msg.sender),
             _landId,
-            reqStatus.requested,
+            OwnerApprovalStatus.REQUESTED,
             false,
-            block.timestamp
+            block.timestamp,
+            GovernmentApprovalStatus.PENDING
         );
         MyReceivedLandRequest[lands[_landId].ownerAddress].push(requestCount);
         MySentLandRequest[msg.sender].push(requestCount);
 
-        emit LandIsRequestedToBuy(_landId);
+        emit LandIsRequestedToBuy(requestCount, _landId);
+        return requestCount;
     }
 
     function myReceivedLandRequests() public view returns (uint[] memory) {
@@ -285,15 +315,17 @@ contract Land is ReentrancyGuard {
 
     function acceptRequest(uint _requestId) public {
         require(LandRequestMapping[_requestId].sellerId == msg.sender);
-        LandRequestMapping[_requestId].requestStatus = reqStatus.accepted;
+        LandRequestMapping[_requestId].requestStatus = OwnerApprovalStatus
+            .ACCEPTED;
     }
 
     function rejectRequest(uint _requestId) public {
         require(LandRequestMapping[_requestId].sellerId == msg.sender);
-        LandRequestMapping[_requestId].requestStatus = reqStatus.rejected;
+        LandRequestMapping[_requestId].requestStatus = OwnerApprovalStatus
+            .REJECTED;
     }
 
-    function requesteStatus(uint id) public view returns (bool) {
+    function isUserRequestFulfilled(uint id) public view returns (bool) {
         return LandRequestMapping[id].isPaymentDone;
     }
 
@@ -301,26 +333,77 @@ contract Land is ReentrancyGuard {
         return lands[id].landPrice;
     }
 
-    error PaymentAlreadyCompleted();
+    modifier GovernmentApprovalCheck(uint _requestId) {
+        require(
+            LandRequestMapping[_requestId].requestStatus ==
+                OwnerApprovalStatus.ACCEPTED,
+            "Owner MUST approve to sell asset"
+        );
+        require(
+            LandRequestMapping[_requestId].govApprovalStatus ==
+                GovernmentApprovalStatus.ACCEPTED,
+            "Government MUST approve the Transaction"
+        );
+        _;
+    }
 
-    function makePayment(uint _requestId) public payable {
+    function changeGovernmentStatus(uint _requestID, uint status)
+        public
+        isGovernmentOfficial
+    {
+        GovernmentApprovalStatus g = GovernmentApprovalStatus.PENDING;
+
+        if (status == 0) {
+            g = GovernmentApprovalStatus.PENDING;
+        } else if (status == 1) {
+            g = GovernmentApprovalStatus.ACCEPTED;
+        } else if (status == 2) {
+            g = GovernmentApprovalStatus.REJECTED;
+        }
+
+        LandRequestMapping[_requestID].govApprovalStatus = g;
+    }
+
+    error PaymentAlreadyCompleted();
+    error TransactionFailed();
+
+    function makePayment(uint _requestId)
+        public
+        payable
+        GovernmentApprovalCheck(_requestId)
+    {
         require(
             LandRequestMapping[_requestId].buyerId == msg.sender &&
                 LandRequestMapping[_requestId].requestStatus ==
-                reqStatus.accepted
+                OwnerApprovalStatus.ACCEPTED
         );
         if (LandRequestMapping[_requestId].isPaymentDone != false)
             revert PaymentAlreadyCompleted();
 
-        LandRequestMapping[_requestId].requestStatus = reqStatus.paymentdone;
+        LandRequestMapping[_requestId].requestStatus = OwnerApprovalStatus
+            .PAYMENT_DONE;
         require(
             msg.value >= lands[LandRequestMapping[_requestId].landId].landPrice,
             "Transacted amount is lesser than current Land price"
         );
 
-        lands[LandRequestMapping[_requestId].landId].ownerAddress.transfer(
-            msg.value
+        uint transferAmount = msg.value;
+        uint governmentFeesAmount;
+        governmentFeesAmount = (governmentFeesRate * transferAmount) / 100;
+        transferAmount -= governmentFeesAmount;
+
+        (bool govTxStatus, ) = payable(GovernmentOfficial).call{
+            value: governmentFeesAmount
+        }("");
+        if (!govTxStatus) revert TransactionFailed();
+
+        address currentAssetOwner = lands[LandRequestMapping[_requestId].landId]
+            .ownerAddress;
+        (bool Tx, ) = payable(currentAssetOwner).call{value: transferAmount}(
+            ""
         );
+        if (!Tx) revert TransactionFailed();
+
         LandRequestMapping[_requestId].isPaymentDone = true;
         paymentDoneList[1].push(_requestId);
 
@@ -334,7 +417,8 @@ contract Land is ReentrancyGuard {
     function transferOwnership(uint _requestId) internal returns (bool) {
         if (LandRequestMapping[_requestId].isPaymentDone == false) return false;
         // documentId++;
-        LandRequestMapping[_requestId].requestStatus = reqStatus.commpleted;
+        LandRequestMapping[_requestId].requestStatus = OwnerApprovalStatus
+            .COMPLETED;
         MyLands[LandRequestMapping[_requestId].buyerId].push(
             LandRequestMapping[_requestId].landId
         );
@@ -361,7 +445,42 @@ contract Land is ReentrancyGuard {
         return true;
     }
 
-    function makePaymentTestFun(address payable _reveiver) public payable {
-        _reveiver.transfer(msg.value);
+    function getUserByAddress(address userAddress)
+        external
+        view
+        returns (
+            address,
+            string memory,
+            uint,
+            string memory,
+            string memory,
+            string memory,
+            string memory,
+            string memory,
+            bool,
+            bool
+        )
+    {
+        User memory u = UserMapping[userAddress];
+        return (
+            u.id,
+            u.name,
+            u.age,
+            u.city,
+            u.aadharNumber,
+            u.panNumber,
+            u.document,
+            u.email,
+            u.isUserVerified,
+            u.isExist
+        );
+    }
+
+    function getgovfee() public view returns (uint) {
+        return governmentFeesRate;
+    }
+
+    function getcount() public view returns (uint) {
+        return count;
     }
 }

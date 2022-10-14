@@ -21,16 +21,10 @@ async function updateAbi() {
     `${frontEndAbiLocation}Land.json`,
     nftMarketplace.interface.format(ethers.utils.FormatTypes.json),
   )
-
-  const basicNft = await ethers.getContract('Landmint')
-  fs.writeFileSync(
-    `${frontEndAbiLocation}LandMint.json`,
-    basicNft.interface.format(ethers.utils.FormatTypes.json),
-  )
 }
 
 async function updateContractAddresses() {
-  const chainId =network.config.chainId.toString()
+  const chainId = network.config.chainId.toString()
   const nftMarketplace = await ethers.getContract('Land')
   const contractAddresses = JSON.parse(
     fs.readFileSync(frontEndContractsFile, 'utf8'),

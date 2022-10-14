@@ -29,10 +29,8 @@ const networkConfig = {
 
 const developmentChains = ['hardhat', 'localhost']
 const VERIFICATION_BLOCK_CONFIRMATIONS = 6
-const frontEndContractsFile =
-  '../SSIP-FRONTEND/Next-Js-Nft-MarketPlace-Moralis/constants/contract.json'
-const frontEndAbiLocation =
-  '../SSIP-FRONTEND/Next-Js-Nft-MarketPlace-Moralis/constants/'
+const frontEndContractsFile = '../SSIP/team-abhyuday/constants/contract.json'
+const frontEndAbiLocation = '../SSIP/team-abhyuday/constants/'
 
 module.exports = {
   networkConfig,
