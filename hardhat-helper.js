@@ -29,8 +29,8 @@ const networkConfig = {
 
 const developmentChains = ['hardhat', 'localhost']
 const VERIFICATION_BLOCK_CONFIRMATIONS = 6
-const frontEndContractsFile = '../SSIP/team-abhyuday/constants/contract.json'
-const frontEndAbiLocation = '../SSIP/team-abhyuday/constants/'
+const frontEndContractsFile = '../SSIP/frontend/src/constants/contract.json'
+const frontEndAbiLocation = '../SSIP/frontend/src/constants/'
 
 module.exports = {
   networkConfig,

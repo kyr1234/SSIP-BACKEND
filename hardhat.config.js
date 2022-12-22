@@ -28,6 +28,11 @@ module.exports = {
       chainId: 5,
       blockConfirmations: 6,
     },
+    polygon: {
+      url: "https://polygon-mumbai.g.alchemy.com/v2/g8I0c7eOTRApAGXm3wzZN-qXgamdF-bP",
+      accounts: [PRIVATE_KEY],
+      blockConfirmations: 6,
+    },
   },
   solidity: {
     compilers: [
