@@ -16,7 +16,7 @@ contract Land is ReentrancyGuard {
     uint public userCount;
     uint public landsCount;
     uint public documentId;
-    uint requestCount;
+    uint requestId;
 
     mapping(address => User) public UserMapping;
 
@@ -75,7 +75,7 @@ enum User {
         string document;
         //remove
         uint landPrice;
-        bool isforSell;
+        bool isForSell;
         address payable ownerAddress;
         bool isLandVerified;
     }
@@ -140,6 +140,7 @@ enum User {
     }
 
     function registerUser(
+        /*  ONLY CID NO PRESENT PARAMETERS*/
         string memory _name,
         uint _age,
         string memory _city,
@@ -154,7 +155,7 @@ enum User {
         userCount++;
         allUsersList[1].push(msg.sender);
         AllUsers[userCount] = msg.sender;
-        UserMapping[msg.sender] = User(
+        UserMapping[msg.sender] /* just cid */ = User(
             msg.sender,
             _name,
             _age,
@@ -168,6 +169,7 @@ enum User {
 
         emit NewUserRegistered(
             msg.sender,
+            /* ONLY CID NO BELOW PARAMS */
             _name,
             _age,
             _city,
@@ -204,6 +206,7 @@ enum User {
         return UserMapping[id].isUserVerified;
     }
 
+    /* UNDER CONSIDERATION */
     function ReturnAllUserList() public view returns (address[] memory) {
         return allUsersList[1];
     }
@@ -220,9 +223,10 @@ enum User {
     );
 
     function addLand(
+        uint landPrice /* consideration */,
+        /* only cid for below params */
         uint _area,
         string memory _address,
-        uint landPrice,
         string memory _allLatiLongi,
         uint _propertyPID,
         string memory _surveyNum,
@@ -232,6 +236,7 @@ enum User {
         landsCount++;
         lands[landsCount] = LandAsset(
             landsCount,
+            /* CID */
             _area,
             _address,
             _allLatiLongi,
@@ -246,6 +251,7 @@ enum User {
         MyLands[msg.sender].push(landsCount);
 
         //  allLandList[1].push(landsCount);
+
         emit NewLandAdded(
             landsCount,
             _area,
@@ -262,7 +268,7 @@ enum User {
     }
 
     // modifier government official
-    function verifyLand(uint _id) public isGovernmentOfficial {
+    function verifyLand(uint _id) external isGovernmentOfficial {
         lands[_id].isLandVerified = true;
     }
 
@@ -270,14 +276,14 @@ enum User {
         return lands[id].isLandVerified;
     }
 
-    function myAllLands(address id) public view returns (uint[] memory) {
+    function myAllLands(address id) external view returns (uint[] memory) {
         return MyLands[id];
     }
 
     /*     
         function makeItforSell(uint id) public {
         require(lands[id].ownerAddress == msg.sender);
-        lands[id].isforSell = true;0000
+        lands[id].isForSell = true;0000
     } 
     */
 
@@ -295,9 +301,9 @@ enum User {
             "Owner cannot request for buying land"
         );
 
-        requestCount++;
-        LandRequestMapping[requestCount] = LandRequest(
-            requestCount,
+        requestId++;
+        LandRequestMapping[requestId] = LandRequest(
+            requestId,
             lands[_landId].ownerAddress,
             payable(msg.sender),
             _landId,
@@ -306,28 +312,28 @@ enum User {
             false,
             GovernmentApprovalStatus.PENDING
         );
-        MyReceivedLandRequest[lands[_landId].ownerAddress].push(requestCount);
-        MySentLandRequest[msg.sender].push(requestCount);
+        MyReceivedLandRequest[lands[_landId].ownerAddress].push(requestId);
+        MySentLandRequest[msg.sender].push(requestId);
 
-        emit LandIsRequestedToBuy(requestCount, _landId);
-        return requestCount;
+        emit LandIsRequestedToBuy(requestId, _landId);
+        return requestId;
     }
 
-    function myReceivedLandRequests() public view returns (uint[] memory) {
+    function myReceivedLandRequests() external view returns (uint[] memory) {
         return MyReceivedLandRequest[msg.sender];
     }
 
-    function mySentLandRequests() public view returns (uint[] memory) {
+    function mySentLandRequests() external view returns (uint[] memory) {
         return MySentLandRequest[msg.sender];
     }
 
-    function acceptRequest(uint _requestId) public {
+    function acceptRequest(uint _requestId) external {
         require(LandRequestMapping[_requestId].sellerId == msg.sender);
         LandRequestMapping[_requestId].requestStatus = OwnerApprovalStatus
             .ACCEPTED;
     }
 
-    function rejectRequest(uint _requestId) public {
+    function rejectRequest(uint _requestId) external {
         require(LandRequestMapping[_requestId].sellerId == msg.sender);
         LandRequestMapping[_requestId].requestStatus = OwnerApprovalStatus
             .REJECTED;
@@ -337,6 +343,7 @@ enum User {
         return LandRequestMapping[id].isPaymentDone;
     }
 
+    /* Consideration */
     function landPrices(uint id) public view returns (uint) {
         return lands[id].landPrice;
     }
@@ -360,7 +367,7 @@ enum User {
         uint status
     ) public isGovernmentOfficial {
         GovernmentApprovalStatus g = GovernmentApprovalStatus.PENDING;
-
+        require(status <= 2, "Invalid Status");
         if (status == 0) {
             g = GovernmentApprovalStatus.PENDING;
         } else if (status == 1) {
@@ -416,15 +423,17 @@ enum User {
         transferOwnership(_requestId);
     }
 
-    function returnPaymentDoneList() public view returns (uint[] memory) {
+    /*   function returnPaymentDoneList() public view returns (uint[] memory) {
         return paymentDoneList[1];
-    }
+    } */
 
     function transferOwnership(uint _requestId) internal returns (bool) {
         if (LandRequestMapping[_requestId].isPaymentDone == false) return false;
         // documentId++;
         LandRequestMapping[_requestId].requestStatus = OwnerApprovalStatus
             .COMPLETED;
+
+        /* TIMESTAMP FOR TRACKING LAND TRANSCTION*/
         MyLands[LandRequestMapping[_requestId].buyerId].push(
             LandRequestMapping[_requestId].landId
         );
@@ -442,9 +451,10 @@ enum User {
                 break;
             }
         }
+        /* Document Transfer Consideration */
 
         // lands[LandRequestMapping[_requestId].landId].document = documentUrl;
-        lands[LandRequestMapping[_requestId].landId].isforSell = false;
+        lands[LandRequestMapping[_requestId].landId].isForSell = false;
         lands[LandRequestMapping[_requestId].landId]
             .ownerAddress = LandRequestMapping[_requestId].buyerId;
 
@@ -457,6 +467,8 @@ enum User {
         external
         view
         returns (
+            /* ONLY CID WOULD BE WRIITEN */
+
             address,
             string memory,
             uint,
@@ -470,6 +482,7 @@ enum User {
     {
         User memory u = UserMapping[userAddress];
         return (
+            /* CID ONLY */
             u.id,
             u.name,
             u.age,
@@ -485,8 +498,14 @@ enum User {
     function getGovFee() public view returns (uint) {
         return governmentFeesRate;
     }
-
-    function getCount() public view returns (uint) {
-        return count;
-    }
 }
+
+/* 
+
+1. Area -Based Land Price =>function AddNewAreaPrice()
+2. Land Price Deciding Function =>function PriceForAsset()
+3. IPFS Based Storage-Land,User,Transctions,Previous Transctions(optional)
+4. IPFS Storage For Goverment Stamp Duty
+5. Payment Function Review -optional
+
+ */
